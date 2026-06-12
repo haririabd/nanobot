@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main # Triggers the moment you click "Sync Fork"
+  workflow_dispatch:
 
 jobs:
   rebase-and-build:
