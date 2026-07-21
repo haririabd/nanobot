@@ -1,0 +1,79 @@
+name: Integrated Auto-Rebase and Multi-Arch Docker Build
+
+on:
+  push:
+    branches:
+      - main # Triggers the moment you click "Sync Fork"
+  workflow_dispatch:
+
+jobs:
+  rebase-and-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+
+      - name: Rebase Deployment Branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 1. Switch the runner to your custom infrastructure branch
+          git checkout arm-deployment
+          
+          # 2. Rebase it against the fresh main branch code
+          git rebase origin/main
+          
+          # 3. Push the cleanly updated branch back to GitHub
+          git push origin arm-deployment --force
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate with GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Downcase Repository Owner Name
+        run: |
+          echo "OWNER_LC=${OWNER,,}" >> $GITHUB_ENV
+        env:
+          OWNER: '${{ github.repository_owner }}'
+
+      - name: Build and Push CORE Image (Original Dockerfile)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ghcr.io/${{ env.OWNER_LC }}/nanobot:core
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and Push CUSTOM Image (Your Overlay)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.custom
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            BASE_IMAGE=ghcr.io/${{ env.OWNER_LC }}/nanobot:core
+          tags: |
+            ghcr.io/${{ env.OWNER_LC }}/nanobot:latest
+            ghcr.io/${{ env.OWNER_LC }}/nanobot:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
