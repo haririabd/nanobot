@@ -1,0 +1,15 @@
+# We will pass this image name dynamically from GitHub Actions
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+# Switch to root to install your system dependencies
+USER root
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends wkhtmltopdf fonts-liberation && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install custom Python dependencies directly
+RUN uv pip install --system --no-cache pdfkit
+
+# Switch back to the secure non-root user
+USER nanobot
