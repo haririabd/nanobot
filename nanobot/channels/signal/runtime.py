@@ -431,6 +431,7 @@ class SignalChannel(BaseChannel):
         session_key: str | None = None,
         is_dm: bool = False,
         authorization_id: str | None = None,
+        require_existing_session: bool = False,
     ) -> None:
         """Handle an inbound message whose policy has already been checked.
 
@@ -453,6 +454,7 @@ class SignalChannel(BaseChannel):
                 media=media or [],
                 metadata=meta,
                 session_key_override=session_key,
+                require_existing_session=require_existing_session,
             )
         )
 
@@ -860,6 +862,7 @@ class SignalChannel(BaseChannel):
                 return False, chat_id
             if (
                 self.config.group.policy == "allowlist"
+                and "*" not in self.config.group.allow_from
                 and chat_id not in self.config.group.allow_from
             ):
                 self.logger.info(
@@ -1059,6 +1062,9 @@ class SignalChannel(BaseChannel):
     def _sender_matches_allowlist(cls, sender_id: str, allow_list: list[str]) -> bool:
         """Return True if any normalized variant of sender_id is on allow_list.
 
+        A ``"*"`` entry allows every sender, matching the channel-wide
+        allowlist contract.
+
         Both ``sender_id`` and each allow_list entry can be a single
         identifier or a pipe-joined composite of several (e.g.
         ``"+1234567890|uuid-abc"``); both sides are split on ``|`` and each
@@ -1068,6 +1074,8 @@ class SignalChannel(BaseChannel):
         """
         if not allow_list:
             return False
+        if "*" in allow_list:
+            return True
         sender_variants: set[str] = set()
         for part in str(sender_id).split("|"):
             sender_variants.update(cls._normalize_signal_id(part))
